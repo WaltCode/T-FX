@@ -1,0 +1,62 @@
+x-app-env: &app-env
+  DATABASE_URL: postgres://tfx:tfx@postgres:5432/tfx
+  REDIS_URL: redis://redis:6379
+  FX_PROVIDER: ${FX_PROVIDER:-open-er-api}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tfx
+      POSTGRES_PASSWORD: tfx
+      POSTGRES_DB: tfx
+    ports: ['5432:5432']
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tfx -d tfx']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot: applies migrations before the API starts, so API replicas never race on them.
+  migrate:
+    build:
+      context: .
+      target: build
+    command: ['yarn', 'migration:run']
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      <<: *app-env
+      PORT: '8907'
+      DB_MIGRATIONS_RUN: 'false'
+    ports: ['8907:8907']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8907/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
