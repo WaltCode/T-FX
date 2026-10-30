@@ -36,7 +36,7 @@ yarn dev
 Migrations are generated from the entities:
 
 ```bash
-npm run migration:generate --name=Init   # sets $npm_config_name
+npm run migration:generate Init   # sets $npm_config_name
 yarn migration:run
 yarn migration:revert
 ```
